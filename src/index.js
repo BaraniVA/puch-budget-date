@@ -77,42 +77,47 @@ mcServer.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Keep track of active SSE sessions
 const sessions = new Map(); // sessionId -> transport
 
-// SSE GET: establish stream and send the endpoint event
-// Shared handler to bootstrap an SSE transport and connect the MCP server
-function handleSSE(req, res, endpointPath = '/mcp/sse') {
-  const transport = new SSEServerTransport(endpointPath, res);
-  const id = transport.sessionId;
-  sessions.set(id, transport);
-  transport.onclose = () => sessions.delete(id);
-  transport.onerror = (err) => logger.error({ err, sessionId: id }, 'SSE transport error');
-  mcServer.connect(transport).catch((err) => {
-    logger.error({ err }, 'Failed to connect MCP transport');
-    try { res.end(); } catch {}
-  });
-}
-
-app.get('/mcp/sse', (req, res) => {
-  handleSSE(req, res);
-});
-
-// Alias: some clients expect SSE at the base /mcp path; serve SSE when Accept is text/event-stream
+// HTTP+SSE transport (backwards compatible with Puch AI)
+// GET /mcp: establish SSE stream with endpoint event
 app.get('/mcp', (req, res, next) => {
   const accept = req.headers['accept'] || '';
   if (String(accept).includes('text/event-stream')) {
-    return handleSSE(req, res, '/mcp');
+    // Set up SSE response headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+    
+    // Create MCP SSE transport
+    const transport = new SSEServerTransport('/mcp', res);
+    const sessionId = transport.sessionId;
+    sessions.set(sessionId, transport);
+    
+    transport.onclose = () => sessions.delete(sessionId);
+    transport.onerror = (err) => logger.error({ err, sessionId }, 'SSE transport error');
+    
+    // Connect MCP server to transport
+    mcServer.connect(transport).catch((err) => {
+      logger.error({ err }, 'Failed to connect MCP transport');
+      try { res.end(); } catch {}
+    });
+    
+    return; // End here for SSE
   }
   // Not an SSE request; continue to router (e.g., /mcp/tools/*)
   return next();
 });
 
-// SSE POST: receive client JSON-RPC messages for a session
-// Use route-level raw parser to avoid global JSON body parser
-app.post('/mcp/sse', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
+// POST /mcp: receive JSON-RPC messages for SSE sessions
+app.post('/mcp', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
   const sessionId = req.query.sessionId;
   const transport = sessions.get(sessionId);
   if (!transport) return res.status(404).send('Unknown or expired session');
+  
   try {
-    // Directly handle message to avoid double-reading the stream
     const payload = JSON.parse(req.body || '{}');
     await transport.handleMessage(payload);
     res.status(202).send('Accepted');
@@ -122,8 +127,20 @@ app.post('/mcp/sse', express.text({ type: 'application/json', limit: '4mb' }), a
   }
 });
 
-// SSE POST: also handle messages to /mcp (for clients that connect there)
-app.post('/mcp', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
+// Legacy /mcp/sse endpoints for compatibility
+app.get('/mcp/sse', (req, res) => {
+  const transport = new SSEServerTransport('/mcp/sse', res);
+  const sessionId = transport.sessionId;
+  sessions.set(sessionId, transport);
+  transport.onclose = () => sessions.delete(sessionId);
+  transport.onerror = (err) => logger.error({ err, sessionId }, 'SSE transport error');
+  mcServer.connect(transport).catch((err) => {
+    logger.error({ err }, 'Failed to connect MCP transport');
+    try { res.end(); } catch {}
+  });
+});
+
+app.post('/mcp/sse', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
   const sessionId = req.query.sessionId;
   const transport = sessions.get(sessionId);
   if (!transport) return res.status(404).send('Unknown or expired session');
