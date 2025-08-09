@@ -79,8 +79,8 @@ const sessions = new Map(); // sessionId -> transport
 
 // SSE GET: establish stream and send the endpoint event
 // Shared handler to bootstrap an SSE transport and connect the MCP server
-function handleSSE(req, res) {
-  const transport = new SSEServerTransport('/mcp/sse', res);
+function handleSSE(req, res, endpointPath = '/mcp/sse') {
+  const transport = new SSEServerTransport(endpointPath, res);
   const id = transport.sessionId;
   sessions.set(id, transport);
   transport.onclose = () => sessions.delete(id);
@@ -99,7 +99,7 @@ app.get('/mcp/sse', (req, res) => {
 app.get('/mcp', (req, res, next) => {
   const accept = req.headers['accept'] || '';
   if (String(accept).includes('text/event-stream')) {
-    return handleSSE(req, res);
+    return handleSSE(req, res, '/mcp');
   }
   // Not an SSE request; continue to router (e.g., /mcp/tools/*)
   return next();
@@ -113,6 +113,21 @@ app.post('/mcp/sse', express.text({ type: 'application/json', limit: '4mb' }), a
   if (!transport) return res.status(404).send('Unknown or expired session');
   try {
     // Directly handle message to avoid double-reading the stream
+    const payload = JSON.parse(req.body || '{}');
+    await transport.handleMessage(payload);
+    res.status(202).send('Accepted');
+  } catch (err) {
+    logger.error({ err, sessionId }, 'Failed to handle client message');
+    res.status(400).send('Invalid message');
+  }
+});
+
+// SSE POST: also handle messages to /mcp (for clients that connect there)
+app.post('/mcp', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
+  const sessionId = req.query.sessionId;
+  const transport = sessions.get(sessionId);
+  if (!transport) return res.status(404).send('Unknown or expired session');
+  try {
     const payload = JSON.parse(req.body || '{}');
     await transport.handleMessage(payload);
     res.status(202).send('Accepted');
