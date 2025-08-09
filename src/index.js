@@ -16,7 +16,8 @@ app.get('/', (req, res) => {
   res.json({ ok: true, name: 'BudgetDate MCP', version: '1.0.0' });
 });
 
-app.use('/mcp', mcpRouter);
+// Mount MCP routes at root for Puch compatibility
+app.use('/', mcpRouter);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
