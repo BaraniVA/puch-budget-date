@@ -4,8 +4,8 @@ import { budgetDateTool, validateTool } from '../services/tools.js';
 
 const router = express.Router();
 
-// MCP: list available tools - mounted at /mcp/tools/list
-router.get('/mcp/tools/list', (_req, res) => {
+// MCP: list available tools - at /tools/list (when mounted at /mcp)
+router.get('/tools/list', (_req, res) => {
   res.json({
     tools: [
       {
@@ -43,8 +43,8 @@ const CallSchema = z.object({
   arguments: z.record(z.any()).default({}),
 });
 
-// MCP: call tool - mounted at /mcp/tools/call
-router.post('/mcp/tools/call', async (req, res) => {
+// MCP: call tool - at /tools/call (when mounted at /mcp)
+router.post('/tools/call', async (req, res) => {
   const parse = CallSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Invalid request', details: parse.error.errors });
