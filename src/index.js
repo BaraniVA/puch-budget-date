@@ -77,6 +77,11 @@ mcServer.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Keep track of active SSE sessions
 const sessions = new Map(); // sessionId -> transport
 
+// ------------------ REST endpoints (optional/testing) ------------------
+app.use(express.json({ limit: '1mb' }));
+// Mount existing REST-style MCP routes for simple testing BEFORE SSE routes
+app.use('/mcp', mcpRouter);
+
 // HTTP+SSE transport (backwards compatible with Puch AI)
 // GET /mcp: establish SSE stream with endpoint event
 app.get('/mcp', (req, res, next) => {
@@ -107,13 +112,18 @@ app.get('/mcp', (req, res, next) => {
     
     return; // End here for SSE
   }
-  // Not an SSE request; continue to router (e.g., /mcp/tools/*)
+  // Not an SSE request; let REST router handle it
   return next();
 });
 
 // POST /mcp: receive JSON-RPC messages for SSE sessions
-app.post('/mcp', express.text({ type: 'application/json', limit: '4mb' }), async (req, res) => {
+app.post('/mcp', express.text({ type: 'application/json', limit: '4mb' }), async (req, res, next) => {
   const sessionId = req.query.sessionId;
+  if (!sessionId) {
+    // No sessionId means this is probably a REST call, let router handle it
+    return next();
+  }
+  
   const transport = sessions.get(sessionId);
   if (!transport) return res.status(404).send('Unknown or expired session');
   
@@ -153,11 +163,6 @@ app.post('/mcp/sse', express.text({ type: 'application/json', limit: '4mb' }), a
     res.status(400).send('Invalid message');
   }
 });
-
-// ------------------ REST endpoints (optional/testing) ------------------
-app.use(express.json({ limit: '1mb' }));
-// Mount existing REST-style MCP routes for simple testing
-app.use('/mcp', mcpRouter);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
