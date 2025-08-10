@@ -13,7 +13,7 @@ router.get('/tools/list', (_req, res) => {
         description: 'Validates bearer token and returns owner phone number',
         input_schema: {
           type: 'object',
-          required: ['token'],
+          // token can be provided either in arguments or via Authorization: Bearer <token>
           properties: { token: { type: 'string' } },
         },
       },
@@ -43,6 +43,11 @@ const CallSchema = z.object({
   arguments: z.record(z.any()).default({}),
 });
 
+// lightweight health for MCP
+router.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'mcp', time: new Date().toISOString() });
+});
+
 // MCP: call tool
 router.post('/tools/call', async (req, res) => {
   const parse = CallSchema.safeParse(req.body);
@@ -52,7 +57,17 @@ router.post('/tools/call', async (req, res) => {
   const { name, arguments: args } = parse.data;
   try {
     if (name === 'validate') {
-      const phone = await validateTool(args);
+      // accept token from args or Authorization header
+      let token = args?.token;
+      if (!token) {
+        const auth = req.headers['authorization'] || '';
+        const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
+        if (m) token = m[1];
+      }
+      if (!token) {
+        return res.status(401).json({ error: 'Missing bearer token' });
+      }
+      const phone = await validateTool({ token });
       return res.json({ content: [{ type: 'text', text: String(phone) }] });
     }
     if (name === 'budgetDate') {
