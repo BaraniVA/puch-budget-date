@@ -82,4 +82,21 @@ router.post('/tools/call', async (req, res) => {
   }
 });
 
+// Simple index for Puch probes: GET /mcp
+router.get('/', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'mcp',
+    time: new Date().toISOString(),
+    endpoints: {
+      health: '/mcp/health',
+      toolsList: '/mcp/tools/list',
+      toolsCall: '/mcp/tools/call',
+    },
+  });
+});
+
+// Optional: fast HEAD for load balancers
+router.head('/', (_req, res) => res.sendStatus(204));
+
 export default router;
