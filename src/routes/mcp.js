@@ -4,13 +4,21 @@ import { budgetDateTool, validateTool } from '../services/tools.js';
 
 const router = express.Router();
 
+// CORS + cache headers for all MCP responses (must be BEFORE routes)
+const allow = (_req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Cache-Control': 'no-store',
+  });
+};
+router.use((req, res, next) => { allow(req, res); next(); });
+
 // Debug: log MCP requests
 router.use((req, res, next) => {
   const t = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - t;
-    console.log(`[MCP] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${ms}ms`);
-  });
+  res.on('finish', () => console.log(`[MCP] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${Date.now()-t}ms`));
   next();
 });
 
@@ -154,27 +162,30 @@ router.post('/tools/validate', async (req, res) => {
   }
 });
 
-// CORS-safe fast responses (even if not needed for server-to-server)
-const allow = (_req, res) => {
-  res.set({
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Cache-Control': 'no-store',
-  });
-};
-
-router.use((req, res, next) => {
-  allow(req, res);
-  next();
+// New: direct validate alias some clients use: POST /mcp/validate
+router.post('/validate', async (req, res) => {
+  try {
+    let token = req.body?.token || req.body?.bearer_token;
+    if (!token) {
+      const auth = req.headers['authorization'] || '';
+      const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
+      if (m) token = m[1];
+    }
+    if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
+    const phone = await validateTool({ token });
+    res.json({ ok: true, phone: String(phone) });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message || 'Internal error' });
+  }
 });
 
-// OPTIONS for top-level and tools endpoints
+// Keep HEAD=200, OPTIONS=204 for all endpoints
 router.options('/', (_req, res) => res.sendStatus(204));
 router.options('/tools', (_req, res) => res.sendStatus(204));
 router.options('/tools/list', (_req, res) => res.sendStatus(204));
 router.options('/tools/call', (_req, res) => res.sendStatus(204));
 router.options('/tools/validate', (_req, res) => res.sendStatus(204));
+router.options('/validate', (_req, res) => res.sendStatus(204));
 
 // Optional: explicit HEAD handlers for tools endpoints
 router.head('/tools', (_req, res) => res.sendStatus(200));
