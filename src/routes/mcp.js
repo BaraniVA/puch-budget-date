@@ -14,39 +14,42 @@ router.use((req, res, next) => {
   next();
 });
 
-// MCP: list available tools
-router.get('/tools/list', (_req, res) => {
-  res.json({
-    tools: [
-      {
-        name: 'validate',
-        description: 'Validates bearer token and returns owner phone number',
-        input_schema: {
-          type: 'object',
-          // token can be provided either in arguments or via Authorization: Bearer <token>
-          properties: { token: { type: 'string' } },
+// MCP: list available tools (refactor to reuse for /tools and /tools/list)
+const toolsPayload = {
+  tools: [
+    {
+      name: 'validate',
+      description: 'Validates bearer token and returns owner phone number',
+      input_schema: {
+        type: 'object',
+        required: [], // explicit, some clients expect this field
+        properties: { token: { type: 'string' } },
+      },
+    },
+    {
+      name: 'budgetDate',
+      description:
+        'Given budget, city or coordinates, and preferences, returns a 3–4 step romantic itinerary as JSON',
+      input_schema: {
+        type: 'object',
+        required: ['budget'],
+        properties: {
+          budget: { type: 'number' },
+          city: { type: 'string' },
+          latitude: { type: 'number' },
+          longitude: { type: 'number' },
+          preferences: { type: 'string' },
+          spin: { type: 'boolean' },
         },
       },
-      {
-        name: 'budgetDate',
-        description:
-          'Given budget, city or coordinates, and preferences, returns a 3–4 step romantic itinerary as JSON',
-        input_schema: {
-          type: 'object',
-          required: ['budget'],
-          properties: {
-            budget: { type: 'number' },
-            city: { type: 'string' },
-            latitude: { type: 'number' },
-            longitude: { type: 'number' },
-            preferences: { type: 'string' },
-            spin: { type: 'boolean' },
-          },
-        },
-      },
-    ],
-  });
-});
+    },
+  ],
+};
+
+router.get('/tools/list', (_req, res) => res.json(toolsPayload));
+
+// Alias some clients use: GET /mcp/tools
+router.get('/tools', (_req, res) => res.json(toolsPayload));
 
 const CallSchema = z.object({
   name: z.enum(['validate', 'budgetDate']),
@@ -133,5 +136,22 @@ router.get('/', (req, res) => {
 
 // Optional: fast HEAD for load balancers
 router.head('/', (_req, res) => res.sendStatus(204));
+
+// Direct validate alias some clients try: POST /mcp/tools/validate
+router.post('/tools/validate', async (req, res) => {
+  try {
+    let token = req.body?.token || req.body?.bearer_token;
+    if (!token) {
+      const auth = req.headers['authorization'] || '';
+      const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
+      if (m) token = m[1];
+    }
+    if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
+    const phone = await validateTool({ token });
+    res.json({ ok: true, phone: String(phone) });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message || 'Internal error' });
+  }
+});
 
 export default router;
