@@ -4,6 +4,16 @@ import { budgetDateTool, validateTool } from '../services/tools.js';
 
 const router = express.Router();
 
+// Debug: log MCP requests
+router.use((req, res, next) => {
+  const t = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - t;
+    console.log(`[MCP] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${ms}ms`);
+  });
+  next();
+});
+
 // MCP: list available tools
 router.get('/tools/list', (_req, res) => {
   res.json({
@@ -57,8 +67,8 @@ router.post('/tools/call', async (req, res) => {
   const { name, arguments: args } = parse.data;
   try {
     if (name === 'validate') {
-      // accept token from args or Authorization header
-      let token = args?.token;
+      // accept token from args, Authorization, or bearer_token alias
+      let token = args?.token || args?.bearer_token;
       if (!token) {
         const auth = req.headers['authorization'] || '';
         const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
@@ -85,7 +95,7 @@ router.post('/tools/call', async (req, res) => {
 // POST /mcp — Puch connect handshake: validate bearer token and return phone
 router.post('/', async (req, res) => {
   try {
-    let token = req.body?.token;
+    let token = req.body?.token || req.body?.bearer_token;
     if (!token) {
       const auth = req.headers['authorization'] || '';
       const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
@@ -94,7 +104,13 @@ router.post('/', async (req, res) => {
     if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
 
     const phone = await validateTool({ token });
-    return res.json({ ok: true, phone: String(phone) });
+    return res.json({
+      ok: true,
+      phone: String(phone),
+      // optional extras so clients don’t need another round-trip
+      endpoints: { toolsList: '/mcp/tools/list', toolsCall: '/mcp/tools/call' },
+      server: { name: 'BudgetDate MCP', version: '1.0.0' },
+    });
   } catch (err) {
     const status = err.status || 500;
     return res.status(status).json({ ok: false, error: err.message || 'Internal error' });
