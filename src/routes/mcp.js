@@ -115,11 +115,21 @@ router.post('/', async (req, res) => {
     if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
 
     const phone = await validateTool({ token });
+
+    // Build absolute endpoint URLs
+    const base = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const prefix = req.baseUrl || '/mcp';
+    const endpoints = {
+      tools: `${base}${prefix}/tools`,
+      toolsList: `${base}${prefix}/tools/list`,
+      toolsCall: `${base}${prefix}/tools/call`,
+      validate: `${base}${prefix}/validate`,
+    };
+
     return res.json({
       ok: true,
       phone: String(phone),
-      // optional extras so clients don’t need another round-trip
-      endpoints: { toolsList: '/mcp/tools/list', toolsCall: '/mcp/tools/call' },
+      endpoints,
       server: { name: 'BudgetDate MCP', version: '1.0.0' },
     });
   } catch (err) {
@@ -130,14 +140,18 @@ router.post('/', async (req, res) => {
 
 // Simple index for Puch probes: GET /mcp
 router.get('/', (req, res) => {
+  const base = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const prefix = req.baseUrl || '/mcp';
   res.json({
     ok: true,
     service: 'mcp',
     time: new Date().toISOString(),
     endpoints: {
-      health: '/mcp/health',
-      toolsList: '/mcp/tools/list',
-      toolsCall: '/mcp/tools/call',
+      tools: `${base}${prefix}/tools`,
+      toolsList: `${base}${prefix}/tools/list`,
+      toolsCall: `${base}${prefix}/tools/call`,
+      validate: `${base}${prefix}/validate`,
+      health: `${base}${prefix}/health`,
     },
   });
 });
@@ -147,23 +161,6 @@ router.head('/', (_req, res) => res.sendStatus(200));
 
 // Direct validate alias some clients try: POST /mcp/tools/validate
 router.post('/tools/validate', async (req, res) => {
-  try {
-    let token = req.body?.token || req.body?.bearer_token;
-    if (!token) {
-      const auth = req.headers['authorization'] || '';
-      const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
-      if (m) token = m[1];
-    }
-    if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
-    const phone = await validateTool({ token });
-    res.json({ ok: true, phone: String(phone) });
-  } catch (err) {
-    res.status(err.status || 500).json({ ok: false, error: err.message || 'Internal error' });
-  }
-});
-
-// New: direct validate alias some clients use: POST /mcp/validate
-router.post('/validate', async (req, res) => {
   try {
     let token = req.body?.token || req.body?.bearer_token;
     if (!token) {
