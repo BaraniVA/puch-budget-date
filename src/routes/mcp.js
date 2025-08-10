@@ -82,6 +82,25 @@ router.post('/tools/call', async (req, res) => {
   }
 });
 
+// POST /mcp — Puch connect handshake: validate bearer token and return phone
+router.post('/', async (req, res) => {
+  try {
+    let token = req.body?.token;
+    if (!token) {
+      const auth = req.headers['authorization'] || '';
+      const m = /^Bearer\s+(.+)$/i.exec(Array.isArray(auth) ? auth[0] : auth);
+      if (m) token = m[1];
+    }
+    if (!token) return res.status(401).json({ ok: false, error: 'Missing bearer token' });
+
+    const phone = await validateTool({ token });
+    return res.json({ ok: true, phone: String(phone) });
+  } catch (err) {
+    const status = err.status || 500;
+    return res.status(status).json({ ok: false, error: err.message || 'Internal error' });
+  }
+});
+
 // Simple index for Puch probes: GET /mcp
 router.get('/', (req, res) => {
   res.json({
