@@ -154,4 +154,31 @@ router.post('/tools/validate', async (req, res) => {
   }
 });
 
+// CORS-safe fast responses (even if not needed for server-to-server)
+const allow = (_req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Cache-Control': 'no-store',
+  });
+};
+
+router.use((req, res, next) => {
+  allow(req, res);
+  next();
+});
+
+// OPTIONS for top-level and tools endpoints
+router.options('/', (_req, res) => res.sendStatus(204));
+router.options('/tools', (_req, res) => res.sendStatus(204));
+router.options('/tools/list', (_req, res) => res.sendStatus(204));
+router.options('/tools/call', (_req, res) => res.sendStatus(204));
+router.options('/tools/validate', (_req, res) => res.sendStatus(204));
+
+// Optional: explicit HEAD handlers for tools endpoints
+router.head('/tools', (_req, res) => res.sendStatus(204));
+router.head('/tools/list', (_req, res) => res.sendStatus(204));
+router.head('/tools/call', (_req, res) => res.sendStatus(204));
+
 export default router;
