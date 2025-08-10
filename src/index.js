@@ -18,6 +18,14 @@ app.get('/', (req, res) => {
 
 app.use('/mcp', mcpRouter);
 
+// Mirror key MCP endpoints at root for clients that drop the /mcp prefix
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path.startsWith('/tools')) {
+    return mcpRouter(req, res, next);
+  }
+  next();
+});
+
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   logger.info({ port }, 'BudgetDate MCP server listening');

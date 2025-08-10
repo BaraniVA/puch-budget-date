@@ -135,7 +135,7 @@ router.get('/', (req, res) => {
 });
 
 // Optional: fast HEAD for load balancers
-router.head('/', (_req, res) => res.sendStatus(204));
+router.head('/', (_req, res) => res.sendStatus(200));
 
 // Direct validate alias some clients try: POST /mcp/tools/validate
 router.post('/tools/validate', async (req, res) => {
@@ -177,8 +177,8 @@ router.options('/tools/call', (_req, res) => res.sendStatus(204));
 router.options('/tools/validate', (_req, res) => res.sendStatus(204));
 
 // Optional: explicit HEAD handlers for tools endpoints
-router.head('/tools', (_req, res) => res.sendStatus(204));
-router.head('/tools/list', (_req, res) => res.sendStatus(204));
-router.head('/tools/call', (_req, res) => res.sendStatus(204));
+router.head('/tools', (_req, res) => res.sendStatus(200));
+router.head('/tools/list', (_req, res) => res.sendStatus(200));
+router.head('/tools/call', (_req, res) => res.sendStatus(200));
 
 export default router;
